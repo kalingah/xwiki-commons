@@ -29,7 +29,6 @@ import org.xwiki.xml.html.HTMLCleanerConfiguration;
 /**
  * Unit tests for {@link DefaultHTMLCleaner} in the HTML5 configuration.
  *
- * @version $Id$
  * @since 14.0RC1
  */
 public class HTML5HTMLCleanerTest extends DefaultHTMLCleanerTest

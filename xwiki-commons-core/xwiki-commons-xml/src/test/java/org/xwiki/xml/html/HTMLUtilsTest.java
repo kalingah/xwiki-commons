@@ -25,6 +25,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.w3c.dom.Document;
 import org.xwiki.component.manager.ComponentManager;
+import org.xwiki.configuration.internal.RestrictedConfigurationSourceProvider;
 import org.xwiki.context.internal.DefaultExecution;
 import org.xwiki.test.annotation.ComponentList;
 import org.xwiki.test.junit5.mockito.ComponentTest;
@@ -50,15 +51,17 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 @ComponentTest
 @ComponentList({
-    LinkFilter.class,
-    ListFilter.class,
-    ListItemFilter.class,
-    FontFilter.class,
-    BodyFilter.class,
-    AttributeFilter.class,
-    ControlCharactersFilter.class,
-    DefaultHTMLCleaner.class,
-    DefaultExecution.class
+        LinkFilter.class,
+        ListFilter.class,
+        ListItemFilter.class,
+        FontFilter.class,
+        BodyFilter.class,
+        AttributeFilter.class,
+        ControlCharactersFilter.class,
+        RestrictedConfigurationSourceProvider.class,
+        DefaultHTMLCleaner.class,
+        DefaultExecution.class,
+        XWikiHTML5TagProvider.class
 })
 class HTMLUtilsTest
 {
