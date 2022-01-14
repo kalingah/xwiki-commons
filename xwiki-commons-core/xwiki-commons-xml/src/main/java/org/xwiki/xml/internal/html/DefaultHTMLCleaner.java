@@ -44,6 +44,7 @@ import org.xwiki.context.ExecutionContext;
 import org.xwiki.xml.html.HTMLCleaner;
 import org.xwiki.xml.html.HTMLCleanerConfiguration;
 import org.xwiki.xml.html.HTMLConstants;
+import org.xwiki.xml.html.XWikiHTML5TagProvider;
 import org.xwiki.xml.html.filter.HTMLFilter;
 
 /**
@@ -356,6 +357,7 @@ public class DefaultHTMLCleaner implements HTMLCleaner
     /**
      * @param configuration The configuration to parse.
      * @return The HTML version specified in the configuration.
+     * @since 14.0RC1
      */
     private int getHTMLVersion(HTMLCleanerConfiguration configuration)
     {
