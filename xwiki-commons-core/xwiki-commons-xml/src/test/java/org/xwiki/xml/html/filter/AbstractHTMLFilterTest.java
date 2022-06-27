@@ -28,6 +28,7 @@ import org.junit.jupiter.api.Test;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.xwiki.component.manager.ComponentManager;
+import org.xwiki.configuration.internal.RestrictedConfigurationSourceProvider;
 import org.xwiki.context.internal.DefaultExecution;
 import org.xwiki.test.annotation.ComponentList;
 import org.xwiki.test.junit5.mockito.ComponentTest;
@@ -40,6 +41,7 @@ import org.xwiki.xml.internal.html.filter.FontFilter;
 import org.xwiki.xml.internal.html.filter.LinkFilter;
 import org.xwiki.xml.internal.html.filter.ListFilter;
 import org.xwiki.xml.internal.html.filter.ListItemFilter;
+import org.xwiki.xml.internal.html.filter.SanitizerFilter;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -61,7 +63,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
     AttributeFilter.class,
     DefaultHTMLCleaner.class,
     DefaultExecution.class,
-    ControlCharactersFilter.class
+    ControlCharactersFilter.class,
+    SanitizerFilter.class,
+    RestrictedConfigurationSourceProvider.class,
 })
 // @formatter:on
 class AbstractHTMLFilterTest

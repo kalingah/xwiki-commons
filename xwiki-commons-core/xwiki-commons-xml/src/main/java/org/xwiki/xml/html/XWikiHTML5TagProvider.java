@@ -26,7 +26,10 @@ import java.util.List;
 import org.htmlcleaner.BelongsTo;
 import org.htmlcleaner.Html5TagProvider;
 import org.htmlcleaner.TagInfo;
+import org.xwiki.component.annotation.Component;
 import org.xwiki.stability.Unstable;
+
+import javax.inject.Singleton;
 
 /**
  * List the tags allowed in HTML5 with custom bug fixes for &lt;style&gt; and &lt;svg&gt;-tags.
@@ -39,6 +42,8 @@ import org.xwiki.stability.Unstable;
  * @since 14.0RC1
  */
 @Unstable
+@Component(roles = XWikiHTML5TagProvider.class)
+@Singleton
 public class XWikiHTML5TagProvider extends Html5TagProvider
 {
     private static final List<String> TAGS_WITH_EXPLICIT_PHRASING_CHILDREN =

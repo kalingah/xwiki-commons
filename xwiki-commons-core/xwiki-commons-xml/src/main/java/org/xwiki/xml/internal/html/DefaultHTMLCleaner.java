@@ -109,9 +109,9 @@ public class DefaultHTMLCleaner implements HTMLCleaner
     // TODO: remove when upgrading to HTMLClener 2.23
     private HTMLFilter controlFilter;
 
-    @Inject
-    @Named("sanitizer")
-    private HTMLFilter sanitizerFilter;
+//    @Inject
+//    @Named("sanitizer")
+//    private HTMLFilter sanitizerFilter;
 
     @Inject
     private Execution execution;
@@ -207,8 +207,8 @@ public class DefaultHTMLCleaner implements HTMLCleaner
             this.listFilter,
             this.fontFilter,
             this.attributeFilter,
-            this.linkFilter,
-            this.sanitizerFilter));
+            this.linkFilter));
+//            this.sanitizerFilter));
         return configuration;
     }
 

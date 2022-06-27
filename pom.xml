@@ -2060,6 +2060,7 @@
           <version>${surefire.version}</version>
           <!-- XWiki rule is to put test in *Test classes -->
           <configuration>
+            <argLine>--add-opens java.base/java.lang=ALL-UNNAMED</argLine>
             <!-- We want to show nested stack traces to see what is the real problem when a test fails! -->
             <trimStackTrace>false</trimStackTrace>
             <includes>

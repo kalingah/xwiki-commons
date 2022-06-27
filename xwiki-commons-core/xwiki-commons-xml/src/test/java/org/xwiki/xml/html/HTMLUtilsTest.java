@@ -38,6 +38,7 @@ import org.xwiki.xml.internal.html.filter.FontFilter;
 import org.xwiki.xml.internal.html.filter.LinkFilter;
 import org.xwiki.xml.internal.html.filter.ListFilter;
 import org.xwiki.xml.internal.html.filter.ListItemFilter;
+import org.xwiki.xml.internal.html.filter.SanitizerFilter;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -51,17 +52,18 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 @ComponentTest
 @ComponentList({
-        LinkFilter.class,
-        ListFilter.class,
-        ListItemFilter.class,
-        FontFilter.class,
-        BodyFilter.class,
-        AttributeFilter.class,
-        ControlCharactersFilter.class,
-        RestrictedConfigurationSourceProvider.class,
-        DefaultHTMLCleaner.class,
-        DefaultExecution.class,
-        XWikiHTML5TagProvider.class
+    LinkFilter.class,
+    ListFilter.class,
+    ListItemFilter.class,
+    FontFilter.class,
+    BodyFilter.class,
+    AttributeFilter.class,
+    ControlCharactersFilter.class,
+    SanitizerFilter.class,
+    RestrictedConfigurationSourceProvider.class,
+    DefaultHTMLCleaner.class,
+    DefaultExecution.class,
+    XWikiHTML5TagProvider.class
 })
 class HTMLUtilsTest
 {
