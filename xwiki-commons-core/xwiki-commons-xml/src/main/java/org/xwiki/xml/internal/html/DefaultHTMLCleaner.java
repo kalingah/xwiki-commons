@@ -35,6 +35,7 @@ import org.htmlcleaner.DoctypeToken;
 import org.htmlcleaner.HtmlCleaner;
 import org.htmlcleaner.TagNode;
 import org.htmlcleaner.TagTransformation;
+import org.htmlcleaner.TrimAttributeTagTransformation;
 import org.htmlcleaner.XWikiDOMSerializer;
 import org.w3c.dom.Document;
 import org.xwiki.component.annotation.Component;
@@ -108,7 +109,14 @@ public class DefaultHTMLCleaner implements HTMLCleaner
     private HTMLFilter controlFilter;
 
     @Inject
+    @Named("sanitizer")
+    private HTMLFilter sanitizerFilter;
+
+    @Inject
     private Execution execution;
+
+    @Inject
+    private XWikiHTML5TagProvider html5TagInfoProvider;
 
     @Override
     public Document clean(Reader originalHtmlContent)
@@ -143,7 +151,13 @@ public class DefaultHTMLCleaner implements HTMLCleaner
         // especially since this makes it extra safe with regards to multithreading (even though HTML Cleaner is
         // already supposed to be thread safe).
         CleanerProperties cleanerProperties = getDefaultCleanerProperties(configuration);
-        HtmlCleaner cleaner = new HtmlCleaner(cleanerProperties);
+        HtmlCleaner cleaner;
+        if (isHTML5(configuration)) {
+            // Use our custom provider to fix bugs, should be checked on each upgrade if still necessary.
+            cleaner = new HtmlCleaner(this.html5TagInfoProvider, cleanerProperties);
+        }  else {
+            cleaner = new HtmlCleaner(cleanerProperties);
+        }
 
         TagNode cleanedNode;
         try {
@@ -160,8 +174,13 @@ public class DefaultHTMLCleaner implements HTMLCleaner
             // Replace by the following when fixed:
             //   result = new DomSerializer(cleanerProperties, false).createDOM(cleanedNode);
 
-            cleanedNode.setDocType(new DoctypeToken("html", "PUBLIC", "-//W3C//DTD XHTML 1.0 Strict//EN",
-                "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"));
+            if (isHTML5(configuration)) {
+                cleanedNode.setDocType(new DoctypeToken(HTMLConstants.TAG_HTML, null, null, null));
+            } else {
+                cleanedNode.setDocType(
+                    new DoctypeToken(HTMLConstants.TAG_HTML, "PUBLIC", "-//W3C//DTD XHTML 1.0 Strict//EN",
+                        "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"));
+            }
             result =
                 new XWikiDOMSerializer(cleanerProperties).createDOM(getAvailableDocumentBuilder(), cleanedNode);
         } catch (ParserConfigurationException ex) {
@@ -187,7 +206,8 @@ public class DefaultHTMLCleaner implements HTMLCleaner
             this.listFilter,
             this.fontFilter,
             this.attributeFilter,
-            this.linkFilter));
+            this.linkFilter,
+            this.sanitizerFilter));
         return configuration;
     }
 
@@ -231,10 +251,8 @@ public class DefaultHTMLCleaner implements HTMLCleaner
         boolean useCharacterReferences = (param != null) && Boolean.parseBoolean(param);
         defaultProperties.setTransResCharsToNCR(useCharacterReferences);
 
-        // By default, we are cleaning XHTML 1.0 code, not HTML 5.
-        // Note: Tests are broken if we don't set the version 4, meaning that supporting HTML5 requires some work.
-        // TODO: handle HTML5 correctly (see: https://jira.xwiki.org/browse/XCOMMONS-901)
-        defaultProperties.setHtmlVersion(4);
+        // Sets the HTML version from the configuration (by default 4).
+        defaultProperties.setHtmlVersion(getHTMLVersion(configuration));
 
         // We trim values by default for all attributes but the input value attribute.
         // The only way to currently do that is to switch off this flag, and to create a dedicated TagTransformation.
@@ -250,6 +268,13 @@ public class DefaultHTMLCleaner implements HTMLCleaner
 
         defaultProperties.setDeserializeEntities(true);
 
+        // Omit comments in restricted mode to avoid any potential parser confusion.
+        // Any part of the filtered HTML that contains unfiltered input is potentially dangerous/a candidate for
+        // parser confusion. Comments, style and script elements seem to be frequently found ingredients in successful
+        // attacks against good sanitizers. We're already removing style and script elements, so removing comments
+        // seems like a good defense against future attacks.
+        defaultProperties.setOmitComments(isRestricted(configuration));
+
         return defaultProperties;
     }
 
@@ -258,23 +283,27 @@ public class DefaultHTMLCleaner implements HTMLCleaner
      * @return the default cleaning transformations to perform on tags, in addition to the base transformations done by
      *         HTML Cleaner
      */
-    private CleanerTransformations getDefaultCleanerTransformations(HTMLCleanerConfiguration configuration)
+    private TrimAttributeCleanerTransformations getDefaultCleanerTransformations(HTMLCleanerConfiguration configuration)
     {
-        CleanerTransformations defaultTransformations = new TrimAttributeCleanerTransformations();
+        TrimAttributeCleanerTransformations defaultTransformations = new TrimAttributeCleanerTransformations();
+
+        TagTransformation tt;
 
         // note that we do not care here to use a TrimAttributeTagTransformation, since the attributes are not preserved
-        TagTransformation tt = new TagTransformation(HTMLConstants.TAG_B,
-            HTMLConstants.TAG_STRONG, false);
-        defaultTransformations.addTransformation(tt);
+        if (!isHTML5(configuration)) {
+            // These tags are not obsolete in HTML5.
+            tt = new TagTransformation(HTMLConstants.TAG_B, HTMLConstants.TAG_STRONG, false);
+            defaultTransformations.addTransformation(tt);
 
-        tt = new TagTransformation(HTMLConstants.TAG_I, HTMLConstants.TAG_EM, false);
-        defaultTransformations.addTransformation(tt);
+            tt = new TagTransformation(HTMLConstants.TAG_I, HTMLConstants.TAG_EM, false);
+            defaultTransformations.addTransformation(tt);
 
-        tt = new TagTransformation(HTMLConstants.TAG_U, HTMLConstants.TAG_INS, false);
-        defaultTransformations.addTransformation(tt);
+            tt = new TagTransformation(HTMLConstants.TAG_U, HTMLConstants.TAG_INS, false);
+            defaultTransformations.addTransformation(tt);
 
-        tt = new TagTransformation(HTMLConstants.TAG_S, HTMLConstants.TAG_DEL, false);
-        defaultTransformations.addTransformation(tt);
+            tt = new TagTransformation(HTMLConstants.TAG_S, HTMLConstants.TAG_DEL, false);
+            defaultTransformations.addTransformation(tt);
+        }
 
         tt = new TagTransformation(HTMLConstants.TAG_STRIKE, HTMLConstants.TAG_DEL, false);
         defaultTransformations.addTransformation(tt);
@@ -283,8 +312,17 @@ public class DefaultHTMLCleaner implements HTMLCleaner
         tt.addAttributeTransformation(HTMLConstants.ATTRIBUTE_STYLE, "text-align:center");
         defaultTransformations.addTransformation(tt);
 
-        String restricted = configuration.getParameters().get(HTMLCleanerConfiguration.RESTRICTED);
-        if ("true".equalsIgnoreCase(restricted)) {
+        if (isHTML5(configuration)) {
+            // Font tags are removed before the filters are applied in HTML5, we thus need a transformation here.
+            defaultTransformations.addTransformation(new FontTagTransformation());
+
+            // The tt-tag is obsolete in HTML5
+            tt = new TrimAttributeTagTransformation(HTMLConstants.TAG_TT, HTMLConstants.TAG_SPAN);
+            tt.addAttributeTransformation(HTMLConstants.ATTRIBUTE_CLASS, "${class} monospace");
+            defaultTransformations.addTransformation(tt);
+        }
+
+        if (isRestricted(configuration)) {
 
             tt = new TagTransformation(HTMLConstants.TAG_SCRIPT, HTMLConstants.TAG_PRE, false);
             defaultTransformations.addTransformation(tt);
@@ -294,5 +332,38 @@ public class DefaultHTMLCleaner implements HTMLCleaner
         }
 
         return defaultTransformations;
+    }
+
+    /**
+     * @param configuration The configuration to parse.
+     * @return If the configuration specifies HTML 5 as version.
+     */
+    private boolean isHTML5(HTMLCleanerConfiguration configuration)
+    {
+        return getHTMLVersion(configuration) == 5;
+    }
+
+    /**
+     * @param configuration the configuration to parse
+     * @return if the parsing should happen in restricted mode
+     */
+    private boolean isRestricted(HTMLCleanerConfiguration configuration)
+    {
+        String restricted = configuration.getParameters().get(HTMLCleanerConfiguration.RESTRICTED);
+        return "true".equalsIgnoreCase(restricted);
+    }
+
+    /**
+     * @param configuration The configuration to parse.
+     * @return The HTML version specified in the configuration.
+     */
+    private int getHTMLVersion(HTMLCleanerConfiguration configuration)
+    {
+        String param = configuration.getParameters().get(HTMLCleanerConfiguration.HTML_VERSION);
+        int htmlVersion = 4;
+        if ("5".equals(param)) {
+            htmlVersion = 5;
+        }
+        return htmlVersion;
     }
 }
