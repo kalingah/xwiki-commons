@@ -84,6 +84,10 @@ public class DefaultHTMLCleaner implements HTMLCleaner
     @Named("body")
     private HTMLFilter bodyFilter;
 
+    @Inject
+    private XWikiHTML5TagProvider html5TagInfoProvider;
+
+
     /**
      * {@link HTMLFilter} for filtering HTML attributes that are used by many different elements and for which we cannot
      * write simple transformations like in {@link #getDefaultCleanerTransformations(HTMLCleanerConfiguration)}.
@@ -137,43 +141,74 @@ public class DefaultHTMLCleaner implements HTMLCleaner
     @Override
     public Document clean(Reader originalHtmlContent, HTMLCleanerConfiguration configuration)
     {
-        Document result;
 
-        // Note: Instantiation of an HtmlCleaner object is cheap so there's no need to cache an instance of it,
-        // especially since this makes it extra safe with regards to multithreading (even though HTML Cleaner is
-        // already supposed to be thread safe).
-        CleanerProperties cleanerProperties = getDefaultCleanerProperties(configuration);
-        HtmlCleaner cleaner = new HtmlCleaner(cleanerProperties);
+            Document result;
 
-        TagNode cleanedNode;
-        try {
-            cleanedNode = cleaner.clean(originalHtmlContent);
-        } catch (Exception e) {
-            // This shouldn't happen since we're not doing any IO... I consider this a flaw in the design of HTML
-            // Cleaner.
-            throw new RuntimeException("Unhandled error when cleaning HTML", e);
+            // Note: Instantiation of an HtmlCleaner object is cheap so there's no need to cache an instance of it,
+            // especially since this makes it extra safe with regards to multithreading (even though HTML Cleaner is
+            // already supposed to be thread safe).
+            CleanerProperties cleanerProperties = getDefaultCleanerProperties(configuration);
+            HtmlCleaner cleaner;
+            if (isHTML5(configuration)) {
+                // Use our custom provider to fix bugs, should be checked on each upgrade if still necessary.
+                cleaner = new HtmlCleaner(this.html5TagInfoProvider, cleanerProperties);
+            }  else {
+                cleaner = new HtmlCleaner(cleanerProperties);
+            }
+
+            TagNode cleanedNode;
+            try {
+                cleanedNode = cleaner.clean(originalHtmlContent);
+            } catch (Exception e) {
+                // This shouldn't happen since we're not doing any IO... I consider this a flaw in the design of HTML
+                // Cleaner.
+                throw new RuntimeException("Unhandled error when cleaning HTML", e);
+            }
+
+            try {
+                // Ideally we would use SF's HTMLCleaner DomSerializer but there are outstanding issues with it, so we're
+                // using a custom XWikiDOMSerializer (see its javadoc for more details).
+                // Replace by the following when fixed:
+                //   result = new DomSerializer(cleanerProperties, false).createDOM(cleanedNode);
+
+                if (isHTML5(configuration)) {
+                    cleanedNode.setDocType(new DoctypeToken(HTMLConstants.TAG_HTML, null, null, null));
+                } else {
+                    cleanedNode.setDocType(
+                            new DoctypeToken(HTMLConstants.TAG_HTML, "PUBLIC", "-//W3C//DTD XHTML 1.0 Strict//EN",
+                                    "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"));
+                }
+                result =
+                        new XWikiDOMSerializer(cleanerProperties).createDOM(getAvailableDocumentBuilder(), cleanedNode);
+            } catch (ParserConfigurationException ex) {
+                throw new RuntimeException("Error while serializing TagNode into w3c dom.", ex);
+            }
+
+            // Finally apply filters.
+            for (HTMLFilter filter : configuration.getFilters()) {
+                filter.filter(result, configuration.getParameters());
+            }
+
+            return result;
+    }
+
+    private boolean isHTML5(HTMLCleanerConfiguration configuration)
+    {
+        return getHTMLVersion(configuration) == 5;
+    }
+
+    /**
+     * @param configuration The configuration to parse.
+     * @return The HTML version specified in the configuration.
+     */
+    private int getHTMLVersion(HTMLCleanerConfiguration configuration)
+    {
+        String param = configuration.getParameters().get(HTMLCleanerConfiguration.HTML_VERSION);
+        int htmlVersion = 4;
+        if ("5".equals(param)) {
+            htmlVersion = 5;
         }
-
-        try {
-            // Ideally we would use SF's HTMLCleaner DomSerializer but there are outstanding issues with it, so we're
-            // using a custom XWikiDOMSerializer (see its javadoc for more details).
-            // Replace by the following when fixed:
-            //   result = new DomSerializer(cleanerProperties, false).createDOM(cleanedNode);
-
-            cleanedNode.setDocType(new DoctypeToken("html", "PUBLIC", "-//W3C//DTD XHTML 1.0 Strict//EN",
-                "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"));
-            result =
-                new XWikiDOMSerializer(cleanerProperties).createDOM(getAvailableDocumentBuilder(), cleanedNode);
-        } catch (ParserConfigurationException ex) {
-            throw new RuntimeException("Error while serializing TagNode into w3c dom.", ex);
-        }
-
-        // Finally apply filters.
-        for (HTMLFilter filter : configuration.getFilters()) {
-            filter.filter(result, configuration.getParameters());
-        }
-
-        return result;
+        return htmlVersion;
     }
 
     @Override
@@ -249,6 +284,12 @@ public class DefaultHTMLCleaner implements HTMLCleaner
         defaultProperties.setTranslateSpecialEntities(translateSpecialEntities);
 
         defaultProperties.setDeserializeEntities(true);
+        // Omit comments in restricted mode to avoid any potential parser confusion.Add commentMore actions
+        // Any part of the filtered HTML that contains unfiltered input is potentially dangerous/a candidate for
+        // parser confusion. Comments, style and script elements seem to be frequently found ingredients in successful
+        // attacks against good sanitizers. We're already removing style and script elements, so removing comments
+        // seems like a good defense against future attacks.
+        defaultProperties.setOmitComments(isRestricted(configuration));
 
         return defaultProperties;
     }
@@ -283,8 +324,7 @@ public class DefaultHTMLCleaner implements HTMLCleaner
         tt.addAttributeTransformation(HTMLConstants.ATTRIBUTE_STYLE, "text-align:center");
         defaultTransformations.addTransformation(tt);
 
-        String restricted = configuration.getParameters().get(HTMLCleanerConfiguration.RESTRICTED);
-        if ("true".equalsIgnoreCase(restricted)) {
+        if (isRestricted(configuration)) {
 
             tt = new TagTransformation(HTMLConstants.TAG_SCRIPT, HTMLConstants.TAG_PRE, false);
             defaultTransformations.addTransformation(tt);
@@ -295,4 +335,14 @@ public class DefaultHTMLCleaner implements HTMLCleaner
 
         return defaultTransformations;
     }
+
+    /**Add commentMore actions
+     * @param configuration the configuration to parse
+     * @return if the parsing should happen in restricted mode
+     */
+    private boolean isRestricted(HTMLCleanerConfiguration configuration) {
+        String restricted = configuration.getParameters().get(HTMLCleanerConfiguration.RESTRICTED);
+        return "true".equalsIgnoreCase(restricted);
+    }
+
 }

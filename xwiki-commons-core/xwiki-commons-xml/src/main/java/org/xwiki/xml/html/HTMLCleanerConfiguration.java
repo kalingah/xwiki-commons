@@ -55,6 +55,13 @@ public interface HTMLCleanerConfiguration
     String TRANSLATE_SPECIAL_ENTITIES = "translateSpecialEntities";
 
     /**
+     * The HTML (major) version. Should be "5" for HTML5 and "4" (default) otherwise for the default implementation.
+     * @since 14.0RC1
+     */
+
+    String HTML_VERSION = "htmlVersion";
+
+    /**
      * @return the ordered list of filters to use for cleaning the HTML content
      */
     List<HTMLFilter> getFilters();
