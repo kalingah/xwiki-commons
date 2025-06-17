@@ -21,6 +21,7 @@ package org.xwiki.xml.internal.html;
 
 import java.io.Reader;
 import java.util.Arrays;
+import java.util.HashMap;
 
 import javax.inject.Inject;
 import javax.inject.Named;
@@ -45,6 +46,8 @@ import org.xwiki.xml.html.HTMLCleanerConfiguration;
 import org.xwiki.xml.html.HTMLConstants;
 import org.xwiki.xml.html.filter.HTMLFilter;
 
+import static org.xwiki.xml.html.HTMLCleanerConfiguration.RESTRICTED;
+
 /**
  * Default implementation for {@link org.xwiki.xml.html.HTMLCleaner} using the <a href="HTML Cleaner
  * framework>http://htmlcleaner.sourceforge.net/</a>.
@@ -56,6 +59,12 @@ import org.xwiki.xml.html.filter.HTMLFilter;
 @Singleton
 public class DefaultHTMLCleaner implements HTMLCleaner
 {
+
+    /**
+     * configuration parameter constant.
+     */
+    public static final String HTML_CLEANER_RESTRICTED = "html.cleaner.restricted";
+
     /**
      * {@link HTMLFilter} for filtering html lists.
      */
@@ -188,6 +197,14 @@ public class DefaultHTMLCleaner implements HTMLCleaner
             this.fontFilter,
             this.attributeFilter,
             this.linkFilter));
+
+        String value = System.getProperty(HTML_CLEANER_RESTRICTED, "false");
+        if (configuration.getParameters().isEmpty()) {
+            configuration.setParameters(new HashMap<String, String>() { { put(RESTRICTED, value); } });
+        } else if (!configuration.getParameters().containsKey(RESTRICTED)) {
+            configuration.getParameters().put(RESTRICTED, value);
+        }
+
         return configuration;
     }
 
@@ -249,6 +266,8 @@ public class DefaultHTMLCleaner implements HTMLCleaner
         defaultProperties.setTranslateSpecialEntities(translateSpecialEntities);
 
         defaultProperties.setDeserializeEntities(true);
+        defaultProperties.setCleanerTransformations(getDefaultCleanerTransformations(configuration));
+        defaultProperties.setOmitComments(isRestricted(configuration));
 
         return defaultProperties;
     }
@@ -283,8 +302,7 @@ public class DefaultHTMLCleaner implements HTMLCleaner
         tt.addAttributeTransformation(HTMLConstants.ATTRIBUTE_STYLE, "text-align:center");
         defaultTransformations.addTransformation(tt);
 
-        String restricted = configuration.getParameters().get(HTMLCleanerConfiguration.RESTRICTED);
-        if ("true".equalsIgnoreCase(restricted)) {
+        if (isRestricted(configuration)) {
 
             tt = new TagTransformation(HTMLConstants.TAG_SCRIPT, HTMLConstants.TAG_PRE, false);
             defaultTransformations.addTransformation(tt);
@@ -294,5 +312,15 @@ public class DefaultHTMLCleaner implements HTMLCleaner
         }
 
         return defaultTransformations;
+    }
+
+    /**
+     * @param configuration the configuration to parse
+     * @return if the parsing should happen in restricted mode
+     */
+    private boolean isRestricted(HTMLCleanerConfiguration configuration)
+    {
+        String restricted = configuration.getParameters().get(RESTRICTED);
+        return "true".equalsIgnoreCase(restricted);
     }
 }
